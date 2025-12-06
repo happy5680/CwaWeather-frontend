@@ -1,323 +1,312 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8" />
     <title>NEON_WEATHER_V.2077</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <style>
         :root {
-            --neon-cyan: #00f3ff;
-            --neon-pink: #ff00ff;
-            --neon-yellow: #ffee00;
-            --neon-green: #00ff41;
-            --bg-dark: #050505;
-            --panel-bg: rgba(0, 20, 30, 0.85);
-            --grid-line: rgba(0, 243, 255, 0.1);
+            --bg: #05060a;
+            --neon-cyan: #00fff0;
+            --neon-pink: #ff2df0;
+            --neon-yellow: #ffe86b;
+            --text-main: #e5e7eb;
+            --text-sub: #6b7280;
         }
 
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: 'Share Tech Mono', 'Noto Sans TC', monospace;
-            background-color: var(--bg-dark);
-            color: var(--neon-cyan);
-            min-height: 100vh;
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
+            color: var(--text-main);
             overflow-x: hidden;
-            /* 背景網格特效 */
-            background-image: 
-                linear-gradient(var(--grid-line) 1px, transparent 1px),
-                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-            background-size: 30px 30px;
-            padding-bottom: 20px;
-            text-transform: uppercase;
         }
 
-        /* 螢幕掃描線特效 */
-        body::after {
-            content: " ";
-            display: block;
+        /* 粒子 + 雨線 背景 canvas */
+        #weatherParticles {
             position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 200;
-            background-size: 100% 2px, 3px 100%;
+            inset: 0;
+            z-index: -1;
+            display: block;
+        }
+
+        /* 啟動畫面 */
+        .boot-screen {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--neon-cyan);
+            font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            letter-spacing: 0.1em;
+            font-size: 0.9rem;
+        }
+
+        .boot-text {
+            border: 1px solid rgba(148, 163, 184, 0.5);
+            padding: 20px 24px;
+            background: rgba(15, 23, 42, 0.9);
+            box-shadow:
+                0 0 40px rgba(0, 255, 240, 0.25),
+                0 0 80px rgba(255, 45, 240, 0.2);
+        }
+
+        .deco-sidebar {
+            position: fixed;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+            transform-origin: left center;
+            font-size: 0.65rem;
+            letter-spacing: 0.25em;
+            color: rgba(148, 163, 184, 0.7);
+            text-transform: uppercase;
             pointer-events: none;
         }
 
-        /* 頂部系統欄 */
         .status-bar {
+            position: fixed;
+            top: 10px;
+            left: 0;
+            right: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 15px;
-            background: rgba(0, 0, 0, 0.8);
-            border-bottom: 1px solid var(--neon-cyan);
-            box-shadow: 0 0 10px var(--neon-cyan);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(5px);
+            padding: 6px 14px;
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            background: linear-gradient(to right, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.4), rgba(15, 23, 42, 0.9));
+            border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+            z-index: 10;
+            backdrop-filter: blur(10px);
         }
 
         .sys-info {
-            font-size: 0.8rem;
-            color: var(--neon-green);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+                "Courier New", monospace;
         }
 
         .location-badge {
-            background: var(--neon-pink);
-            color: black;
-            padding: 2px 8px;
-            font-weight: bold;
-            clip-path: polygon(10% 0, 100% 0, 100% 100%, 0% 100%);
+            padding: 3px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.7);
+            background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.25), transparent);
+            font-size: 0.7rem;
         }
 
         .container {
-            padding: 15px;
-            max-width: 600px;
-            margin: 0 auto;
+            max-width: 960px;
+            margin: 80px auto 60px;
+            padding: 0 16px 40px;
         }
 
-        /* 裝飾性裝飾：側邊欄數據 */
-        .deco-sidebar {
-            position: fixed;
-            right: 5px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 0.6rem;
-            color: rgba(0, 243, 255, 0.4);
-            writing-mode: vertical-rl;
-            text-orientation: mixed;
-            pointer-events: none;
-            z-index: 50;
+        #heroCard {
+            margin-bottom: 24px;
         }
 
-        /* === 核心：全息投影區 (Hero Card) === */
         .holo-card {
-            border: 1px solid var(--neon-cyan);
-            background: var(--panel-bg);
-            padding: 20px;
             position: relative;
-            margin-bottom: 20px;
-            box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
-            /* 角落裝飾 */
-            clip-path: polygon(
-                0 0, 
-                100% 0, 
-                100% calc(100% - 20px), 
-                calc(100% - 20px) 100%, 
-                0 100%
-            );
+            border-radius: 16px;
+            padding: 18px 20px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.85));
+            border: 1px solid rgba(148, 163, 184, 0.8);
+            box-shadow:
+                0 0 40px rgba(0, 255, 240, 0.15),
+                0 0 80px rgba(255, 45, 240, 0.08);
+            overflow: hidden;
         }
 
         .holo-card::before {
-            content: "STATUS: ACTIVE";
+            content: "";
             position: absolute;
-            top: 5px;
-            right: 10px;
-            font-size: 0.7rem;
-            color: var(--neon-green);
+            inset: -1px;
+            background: conic-gradient(from 120deg, transparent, rgba(56, 189, 248, 0.38), transparent);
+            opacity: 0.6;
+            mix-blend-mode: screen;
+            pointer-events: none;
+        }
+
+        .holo-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.22), transparent 55%),
+                radial-gradient(circle at bottom right, rgba(236, 72, 153, 0.2), transparent 55%);
+            mix-blend-mode: screen;
+            pointer-events: none;
+        }
+
+        .holo-card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .holo-desc {
+            font-size: 0.8rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--text-sub);
+            margin-bottom: 10px;
         }
 
         .holo-temp-wrapper {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin: 20px 0;
+            gap: 14px;
+            margin-bottom: 10px;
         }
 
         .holo-icon {
-            font-size: 4rem;
-            filter: drop-shadow(0 0 10px var(--neon-cyan)) grayscale(0.5) hue-rotate(180deg);
-            animation: float 4s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+            font-size: 2.2rem;
+            filter: grayscale(1) brightness(1.3);
         }
 
         .holo-temp {
-            font-size: 5rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 2px 2px 0px var(--neon-pink), -2px -2px 0 var(--neon-cyan);
-            line-height: 0.9;
+            font-size: 3.2rem;
+            font-weight: 600;
         }
 
-        .holo-desc {
-            font-size: 1.5rem;
-            color: var(--neon-yellow);
-            border-left: 3px solid var(--neon-yellow);
-            padding-left: 10px;
-            margin-bottom: 15px;
-            letter-spacing: 2px;
-        }
-
-        /* 偽裝成數據條的建議區 */
         .data-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin-top: 20px;
-            border-top: 1px dashed var(--neon-cyan);
-            padding-top: 15px;
+            margin-top: 6px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+                monospace;
+            font-size: 0.8rem;
         }
 
         .data-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            font-size: 0.9rem;
+            gap: 8px;
+            margin-top: 4px;
         }
 
         .bar-container {
-            flex-grow: 1;
-            height: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            margin: 0 10px;
-            position: relative;
+            flex: 1;
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.9);
+            overflow: hidden;
+            border: 1px solid rgba(51, 65, 85, 0.9);
         }
 
         .bar-fill {
             height: 100%;
-            background: var(--neon-cyan);
-            box-shadow: 0 0 5px var(--neon-cyan);
-            width: 0%; /* JS animation */
-            transition: width 1s ease-out;
+            background: linear-gradient(to right, var(--neon-cyan), var(--neon-pink));
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.8);
         }
 
         .bar-fill.warning {
-            background: var(--neon-pink);
-            box-shadow: 0 0 5px var(--neon-pink);
+            background: linear-gradient(to right, var(--neon-pink), #fb7185);
+            box-shadow: 0 0 18px rgba(248, 113, 113, 0.9);
         }
 
-        /* === 稍後預報：資料流區 === */
         .section-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-            color: var(--neon-pink);
-        }
-        
-        .section-header::before {
-            content: ">>";
-            margin-right: 5px;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
+            margin: 24px 0 10px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: var(--text-sub);
         }
 
         .scroll-container {
             display: flex;
-            overflow-x: auto;
             gap: 10px;
-            padding-bottom: 10px;
-            scrollbar-width: none;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+
+        .scroll-container::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .scroll-container::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.5);
+            border-radius: 999px;
         }
 
         .data-module {
-            min-width: 130px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 10px;
-            position: relative;
-        }
-
-        .data-module:hover {
-            border-color: var(--neon-yellow);
-            background: rgba(255, 238, 0, 0.05);
+            min-width: 120px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.6);
+            background: linear-gradient(
+                135deg,
+                rgba(15, 23, 42, 0.96),
+                rgba(15, 23, 42, 0.88)
+            );
+            box-shadow: 0 0 20px rgba(15, 23, 42, 0.9);
+            text-align: center;
         }
 
         .mod-time {
             font-size: 0.7rem;
-            color: #888;
-            margin-bottom: 5px;
-            border-bottom: 1px solid #333;
-            display: block;
+            color: var(--text-sub);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
         }
 
         .mod-val {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: white;
+            margin-top: 4px;
+            font-size: 1.1rem;
+            font-weight: 500;
         }
 
-        /* === 裝飾性終端機日誌 === */
         .terminal-logs {
-            font-size: 0.7rem;
-            color: #555;
-            margin-top: 30px;
-            font-family: monospace;
-            border-top: 1px solid #333;
-            padding-top: 10px;
+            margin-top: 24px;
+            padding: 12px 12px 14px;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+                monospace;
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            max-height: 160px;
+            overflow-y: auto;
         }
-        
+
         .log-entry {
-            margin-bottom: 2px;
-        }
-        .log-entry span { color: var(--neon-green); }
-
-        /* Loading Screen - Cyberpunk Style */
-        .boot-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: black;
-            color: var(--neon-green);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 40px;
-            font-family: monospace;
+            margin-bottom: 4px;
         }
 
-        .boot-text {
-            font-size: 1rem;
-            line-height: 1.5;
+        .log-entry span {
+            color: var(--neon-cyan);
+            margin-right: 6px;
         }
 
-        .glitch-text {
-            animation: glitch 0.3s infinite;
-        }
-        
-        @keyframes glitch {
-            0% { transform: translate(0) }
-            20% { transform: translate(-2px, 2px) }
-            40% { transform: translate(-2px, -2px) }
-            60% { transform: translate(2px, 2px) }
-            80% { transform: translate(2px, -2px) }
-            100% { transform: translate(0) }
+        @media (max-width: 640px) {
+            .deco-sidebar {
+                display: none;
+            }
+            .container {
+                margin-top: 80px;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- 背景粒子 + 雨線 -->
+    nvas id="weatherParticless"></canvas>
 
     <!-- 啟動畫面 -->
     <div id="bootScreen" class="boot-screen">
         <div class="boot-text">
-            > SYSTEM_INIT...<br>
-            > CONNECTING TO WEATHER_NET...<br>
-            > [████████░░] 80%<br>
-            > BYPASSING FIREWALL...<br>
-            <span id="bootStatus" style="color:var(--neon-cyan)">> WAITING FOR DATA STREAM...</span>
+            &gt; SYSTEM_INIT...<br />
+            &gt; CONNECTING TO WEATHER_NET...<br />
+            &gt; [████████░░] 80%<br />
+            &gt; BYPASSING FIREWALL...<br />
+            <span id="bootStatus" style="color: var(--neon-cyan)"
+                >&gt; WAITING FOR DATA STREAM...</span
+            >
         </div>
     </div>
 
@@ -330,8 +319,7 @@
         <div class="location-badge">📍 NEO_TAIPEI</div>
     </div>
 
-    <div class="container" id="mainContent" style="display: none;">
-        
+    <div class="container" id="mainContent" style="display: none">
         <!-- 今日焦點 (Hero) -->
         <div id="heroCard">
             <!-- JS 填充 -->
@@ -347,20 +335,195 @@
             <div class="log-entry"><span>[SUCCESS]</span> Atmospheric sensors calibrated.</div>
             <div class="log-entry"><span>[INFO]</span> Cloud density analysis complete.</div>
             <div class="log-entry"><span>[INFO]</span> Retrieving satellite telemetry...</div>
-            <div class="log-entry">> END OF LINE_</div>
+            <div class="log-entry">&gt; END OF LINE_</div>
         </div>
     </div>
 
     <script>
         const API_URL = "https://taipei-weatherapi.zeabur.app/api/weather/kaohsiung";
 
+        // =============== 粒子 + 雨線系統 ===============
+
+        const canvas = document.getElementById("weatherParticles");
+        const ctx = canvas.getContext("2d");
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        window.addEventListener("resize", () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        });
+
+        const baseParticleCount = 90;       // 基礎粒子數
+        const baseRainDropCount = 140;      // 基礎雨線數
+        let particles = [];
+        let raindrops = [];
+
+        // 這三個變數會被天氣資料調整
+        let particleSpeedFactor = 1;
+        let rainIntensityFactor = 0;  // 0 = 無雨, 1 = 大雨
+        let rainSpeedFactor = 1;
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 2 + 1;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = (Math.random() * 0.4 + 0.1) * particleSpeedFactor;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.alpha = Math.random() * 0.5 + 0.2;
+                const colorRoll = Math.random();
+                if (colorRoll < 0.33) {
+                    this.color = "rgba(0, 255, 240," + this.alpha + ")";
+                } else if (colorRoll < 0.66) {
+                    this.color = "rgba(255, 45, 240," + this.alpha + ")";
+                } else {
+                    this.color = "rgba(155, 123, 255," + this.alpha + ")";
+                }
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        class RainDrop {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * -height;
+                this.length = Math.random() * 18 + 12;
+                this.speedY = (Math.random() * 6 + 8) * rainSpeedFactor;
+                this.alpha = Math.random() * 0.6 + 0.3;
+            }
+            update() {
+                this.y += this.speedY;
+                if (this.y > height + this.length) {
+                    this.reset();
+                }
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x, this.y + this.length);
+                ctx.strokeStyle = "rgba(0, 255, 240," + this.alpha + ")";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const count = baseParticleCount + Math.floor(40 * rainIntensityFactor);
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function initRain() {
+            raindrops = [];
+            const count = Math.floor(baseRainDropCount * rainIntensityFactor);
+            for (let i = 0; i < count; i++) {
+                raindrops.push(new RainDrop());
+            }
+        }
+
+        function connectParticles() {
+            const maxDist = 120;
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < maxDist) {
+                        const alpha = 0.18 * (1 - dist / maxDist);
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = "rgba(148, 163, 184," + alpha + ")";
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            ctx.fillStyle = "rgba(3, 7, 18, 0.78)";
+            ctx.fillRect(0, 0, width, height);
+
+            particles.forEach((p) => {
+                p.update();
+                p.draw();
+            });
+            connectParticles();
+
+            raindrops.forEach((r) => {
+                r.update();
+                r.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        initParticles();
+        initRain();
+        animate();
+
+        // 由天氣資料調整粒子 / 雨線狀態
+        function mapWeatherToParticles({ weather, rain, maxTemp }) {
+            const hasRain = weather && weather.includes("雨");
+            if (hasRain || rain >= 40) {
+                rainIntensityFactor = Math.min(1, rain / 100 * 1.2);
+            } else {
+                rainIntensityFactor = 0;
+            }
+
+            if (maxTemp >= 30) {
+                particleSpeedFactor = 1.4;
+            } else if (maxTemp <= 18) {
+                particleSpeedFactor = 0.8;
+            } else {
+                particleSpeedFactor = 1.0;
+            }
+
+            rainSpeedFactor = 0.9 + rainIntensityFactor * 0.6;
+
+            initParticles();
+            initRain();
+        }
+
+        // =============== 既有 UI / 天氣邏輯 ===============
+
         // 隨機跳動 CPU 數字的裝飾效果
         setInterval(() => {
-            document.getElementById('cpuUsage').innerText = Math.floor(Math.random() * 60) + 20;
+            document.getElementById("cpuUsage").innerText =
+                Math.floor(Math.random() * 60) + 20;
         }, 1000);
 
         function getWeatherIcon(weather) {
-            // 這些 emoji 在 CSS filter 濾鏡下會變成很有科技感的單色圖標
             if (!weather) return "📡";
             if (weather.includes("晴")) return "☀️";
             if (weather.includes("多雲")) return "🌥️";
@@ -370,15 +533,14 @@
             return "📡";
         }
 
-        // 把原始的「建議文字」轉換成更像「任務簡報」的風格
         function getTacticalAdvice(rainProb, maxTemp) {
-            let rainStatus = "NOMINAL"; // 正常
-            let rainWidth = rainProb; 
-            let rainClass = ""; // 預設藍色
+            let rainStatus = "NOMINAL";
+            let rainWidth = rainProb;
+            let rainClass = "";
 
             if (parseInt(rainProb) > 30) {
                 rainStatus = "WARNING: PRECIPITATION";
-                rainClass = "warning"; // 變粉色
+                rainClass = "warning";
             }
 
             let tempStatus = "OPTIMAL";
@@ -393,12 +555,19 @@
             const current = forecasts[0];
             const others = forecasts.slice(1);
 
-            // 1. 渲染 Hero Section (主控台)
             const tactical = getTacticalAdvice(current.rain, current.maxTemp);
-            const avgTemp = Math.round((parseInt(current.maxTemp) + parseInt(current.minTemp)) / 2);
+            const avgTemp = Math.round(
+                (parseInt(current.maxTemp) + parseInt(current.minTemp)) / 2
+            );
 
-            // 為了增加資訊密度，我們加上很多 "裝飾性" 的標籤
-            document.getElementById('heroCard').innerHTML = `
+            // 更新粒子 / 雨線狀態
+            mapWeatherToParticles({
+                weather: current.weather,
+                rain: parseInt(current.rain),
+                maxTemp: parseInt(current.maxTemp),
+            });
+
+            document.getElementById("heroCard").innerHTML = `
                 <div class="holo-card">
                     <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#666; margin-bottom:10px;">
                         <span>ID: ${Date.now().toString().slice(-6)}</span>
@@ -415,7 +584,6 @@
                     </div>
 
                     <div class="data-grid">
-                        <!-- 降雨機率 (偽裝成系統負載) -->
                         <div class="data-row">
                             <span style="width:80px">RAIN_PROB</span>
                             <div class="bar-container">
@@ -423,42 +591,48 @@
                             </div>
                             <span style="width:40px; text-align:right">${current.rain}%</span>
                         </div>
-                        <div style="text-align:right; font-size:0.7rem; color:${tactical.rainClass === 'warning' ? 'var(--neon-pink)' : '#666'}">
+                        <div style="text-align:right; font-size:0.7rem; color:${
+                            tactical.rainClass === "warning"
+                                ? "var(--neon-pink)"
+                                : "#666"
+                        }">
                             STATUS: ${tactical.rainStatus}
                         </div>
 
-                        <!-- 溫度範圍 (偽裝成熱能讀數) -->
                         <div class="data-row" style="margin-top:10px;">
                             <span style="width:80px">THERMAL</span>
                             <div class="bar-container">
-                                <!-- 這裡用 CSS 畫一個範圍條 -->
-                                <div class="bar-fill" style="width: ${parseInt(current.maxTemp)*2}%; background:var(--neon-yellow)"></div>
+                                <div class="bar-fill" style="width: ${
+                                    parseInt(current.maxTemp) * 2
+                                }%; background:var(--neon-yellow)"></div>
                             </div>
-                            <span style="width:40px; text-align:right">MAX ${current.maxTemp}</span>
+                            <span style="width:40px; text-align:right">MAX ${
+                                current.maxTemp
+                            }</span>
                         </div>
-                         <div style="text-align:right; font-size:0.7rem; color:#666">
+                        <div style="text-align:right; font-size:0.7rem; color:#666">
                             ADVISORY: ${tactical.tempStatus}
                         </div>
                     </div>
                 </div>
             `;
 
-            // 2. 渲染稍後預報 (資料模組)
-            const scrollContainer = document.getElementById('futureForecasts');
-            scrollContainer.innerHTML = '';
-            
+            const scrollContainer = document.getElementById("futureForecasts");
+            scrollContainer.innerHTML = "";
+
             others.forEach((f, index) => {
                 const startTime = new Date(f.startTime);
                 const timeString = `${startTime.getHours()}:00`;
-                const dateString = `${startTime.getMonth()+1}/${startTime.getDate()}`;
-                
-                // 偶數個加上不同的邊框顏色增加變化
-                const borderColor = index % 2 === 0 ? 'var(--neon-cyan)' : 'var(--neon-pink)';
+                const dateString = `${startTime.getMonth() + 1}/${startTime.getDate()}`;
+                const borderColor =
+                    index % 2 === 0 ? "var(--neon-cyan)" : "var(--neon-pink)";
 
                 scrollContainer.innerHTML += `
                     <div class="data-module" style="border-top: 2px solid ${borderColor}">
                         <div class="mod-time">${dateString} ${timeString}</div>
-                        <div style="font-size:2rem; margin:5px 0;">${getWeatherIcon(f.weather)}</div>
+                        <div style="font-size:2rem; margin:5px 0;">${getWeatherIcon(
+                            f.weather
+                        )}</div>
                         <div class="mod-val">${f.minTemp}-${f.maxTemp}°</div>
                         <div style="font-size:0.7rem; color:var(--neon-cyan); margin-top:5px;">
                             PRECIP: ${f.rain}%
@@ -467,34 +641,34 @@
                 `;
             });
 
-            // 3. 更新完成，添加一行日誌
-            const logContainer = document.querySelector('.terminal-logs');
+            const logContainer = document.querySelector(".terminal-logs");
             logContainer.innerHTML += `<div class="log-entry"><span>[UPDATE]</span> Data stream synchronized at ${new Date().toLocaleTimeString()}.</div>`;
         }
 
         async function fetchWeather() {
             try {
-                // 模擬啟動延遲，更有「開機」感
-                await new Promise(r => setTimeout(r, 2000));
-                
-                document.getElementById('bootStatus').innerText = "> DOWNLOADING PACKETS...";
-                
+                await new Promise((r) => setTimeout(r, 2000));
+
+                document.getElementById("bootStatus").innerText =
+                    "> DOWNLOADING PACKETS...";
+
                 const res = await fetch(API_URL);
                 const json = await res.json();
 
                 if (json.success) {
                     renderWeather(json.data);
-                    
-                    // 隱藏開機畫面
-                    document.getElementById('bootStatus').innerText = "> SYSTEM READY.";
+
+                    document.getElementById("bootStatus").innerText =
+                        "> SYSTEM READY.";
                     setTimeout(() => {
-                        document.getElementById('bootScreen').style.display = 'none';
-                        document.getElementById('mainContent').style.display = 'block';
+                        document.getElementById("bootScreen").style.display = "none";
+                        document.getElementById("mainContent").style.display = "block";
                     }, 800);
                 }
             } catch (e) {
                 console.error(e);
-                document.getElementById('bootStatus').innerHTML = "<span style='color:red; background:white'>ERROR: CONNECTION LOST</span>";
+                document.getElementById("bootStatus").innerHTML =
+                    "<span style='color:red; background:white'>ERROR: CONNECTION LOST</span>";
             }
         }
 
