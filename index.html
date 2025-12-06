@@ -340,12 +340,19 @@
     </div>
 
     <script>
+        document.addEventListener("DOMContentLoaded", () => {
+  const canvas = document.getElementById("weatherParticles");
+  const ctx = canvas.getContext("2d");
+
+  // 這裡開始接：寬高設定、resize 事件、
+  // Particle / RainDrop 類別、initParticles(); initRain(); animate();
+});
+
         const API_URL = "https://taipei-weatherapi.zeabur.app/api/weather/kaohsiung";
 
         // =============== 粒子 + 雨線系統 ===============
 
-        const canvas = document.getElementById("weatherParticles");
-        const ctx = canvas.getContext("2d");
+       
 
         let width = window.innerWidth;
         let height = window.innerHeight;
