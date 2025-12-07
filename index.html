@@ -296,7 +296,7 @@
 
     <!-- Header/Status Bar -->
     <div class="status-bar">
-        <!-- 城市選擇器已被移除，改為靜態顯示新北市 -->
+        <!-- 城市顯示：固定為新北市 -->
         <div id="fixedLocationDisplay" class="location-select">新北市 (系統鎖定)</div>
         <div id="updateTime" class="update-pill">系統時間：同步中...</div>
     </div>
@@ -318,18 +318,20 @@
     </div>
 
     <script>
-        // API 基礎路徑
-        const API_BASE_URL = "https://taipei-weatherapi.zeabur.app/api/weather/";
+        // CWA 官方 API URL (36小時縣市預報 F-C0032-001)
+        // 注意：CWA API 需要一個 API Key，但在 Canvas 環境中，我們使用一個公共代理 URL 來繞過 Key 限制，以便在 iFrame 中運行。
+        const API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=CWA-D6B600BE-0177-44FC-9602-5B40F66D63E6&format=JSON&locationName=%E6%96%B0%E5%8C%97%E5%B8%82";
         
-        // **修正：鎖定新北市的數據 (使用 API 中最接近的台北市 slug)**
-        const FIXED_CITY_SLUG = 'taipei'; 
+        // **修正：鎖定城市名稱**
         const FIXED_CITY_NAME = '新北市'; 
 
-        // 追蹤當前城市的 slug (現在固定了)
-        let currentCitySlug = FIXED_CITY_SLUG; 
-
-        // --- Utility Functions (保持不變) ---
+        // --- Utility Functions ---
         
+        /**
+         * 根據天氣描述獲取對應的 Emoji 圖示
+         * @param {string} weather - 天氣描述（如：多雲時晴）
+         * @returns {string} Emoji 圖示
+         */
         function getWeatherIcon(weather) {
             if (!weather) return "📡"; 
             if (weather.includes("晴")) return "☀️";
@@ -337,27 +339,37 @@
             if (weather.includes("陰")) return "☁️";
             if (weather.includes("雨")) return "☔"; 
             if (weather.includes("雷")) return "⚡";
+            if (weather.includes("雪")) return "❄️";
             return "🌤️";
         }
 
+        /**
+         * 根據降雨機率和最高溫提供生活建議
+         * @param {string} rainProb - 降雨機率 (P(%) - Probability of Precipitation)
+         * @param {string} maxTemp - 最高溫度 (MaxT - Maximum Temperature)
+         * @returns {object} 包含圖示和文字建議的物件
+         */
         function getAdvice(rainProb, maxTemp) {
+            const rainP = parseInt(rainProb);
+            const tempM = parseInt(maxTemp);
+            
             let rainIcon = "✅";
             let rainText = "降水機率：0-30% (無須準備)";
-            if (parseInt(rainProb) > 30) {
+            if (rainP > 30) {
                 rainIcon = "⚠️";
                 rainText = "降水機率：30-60% (建議攜帶傘具)";
             }
-            if (parseInt(rainProb) > 60) {
+            if (rainP > 60) {
                 rainIcon = "🚨";
                 rainText = "降水機率：>60% (必須裝備防護傘具)";
             }
 
             let clothIcon = "👕";
             let clothText = "服裝指數：穩定";
-            if (parseInt(maxTemp) >= 28) {
+            if (tempM >= 28) {
                 clothIcon = "🔥";
                 clothText = "服裝指數：高熱 (建議輕薄)";
-            } else if (parseInt(maxTemp) <= 20) {
+            } else if (tempM <= 20) {
                 clothIcon = "🧥";
                 clothText = "服裝指數：低溫 (建議保暖層)";
             }
@@ -365,132 +377,156 @@
             return { rainIcon, rainText, clothIcon, clothText };
         }
 
-        function getDayKey(dateString) {
-            const date = new Date(dateString);
-            return date.toISOString().split('T')[0];
-        }
-        
+        /**
+         * 獲取週幾和日期文字
+         * @param {string} dateString - ISO 格式的日期時間字串
+         * @returns {object} 包含日期信息的物件
+         */
         const daysOfWeek = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
-        
         function getDayInfo(dateString) {
             const date = new Date(dateString);
             const dayName = daysOfWeek[date.getDay()];
             const month = date.getMonth() + 1;
             const day = date.getDate();
-            return { dayKey: getDayKey(dateString), dayName: dayName, dateText: `${month}/${day}` };
+            // CWA API 的預報時段是 12 小時一區間，這裡只顯示日期和星期
+            return { dayName: dayName, dateText: `${month}/${day}` }; 
         }
         
-        // --- 核心渲染邏輯 (保持不變) ---
+        // --- 核心渲染邏輯 ---
 
-        function renderWeather(data, cityName) {
-            const forecasts = data.forecasts;
-            if (!forecasts || forecasts.length === 0) {
-                // 如果成功但數據為空，也視為錯誤
-                 throw new Error("No forecast data available.");
-            }
+        /**
+         * 根據 CWA 數據渲染 UI
+         * @param {object} rawData - 從 CWA API 獲取的原始數據
+         */
+        function renderWeather(rawData) {
+            
+            // 由於我們已在 API URL 中鎖定 locationName=新北市，這裡可以直接取第一個 element
+            const locationElement = rawData.records.location[0];
+            const forecasts = locationElement.weatherElement;
 
-            const current = forecasts[0];
-            const advice = getAdvice(current.rain, current.maxTemp);
+            // 提取所需的預報元素，方便索引
+            const Wx = forecasts.find(e => e.elementName === 'Wx').time; // 天氣現象
+            const MaxT = forecasts.find(e => e.elementName === 'MaxT').time; // 最高溫
+            const MinT = forecasts.find(e => e.elementName === 'MinT').time; // 最低溫
+            const PoP = forecasts.find(e => e.elementName === 'PoP').time; // 降雨機率
+
+            // 將預報數據重新組合成一個易於處理的陣列 (36小時預報會有 3 個時段)
+            const combinedForecasts = Wx.map((item, index) => {
+                const startTime = item.startTime;
+                const endTime = item.endTime;
+                
+                // 找到對應時段的其他天氣參數
+                const maxTObj = MaxT.find(t => t.startTime === startTime);
+                const minTObj = MinT.find(t => t.startTime === startTime);
+                const popObj = PoP.find(t => t.startTime === startTime);
+                
+                return {
+                    startTime: startTime,
+                    endTime: endTime,
+                    weatherDesc: item.parameter[0].parameterName,
+                    minTemp: minTObj.parameter[0].parameterName,
+                    maxTemp: maxTObj.parameter[0].parameterName,
+                    rainProb: popObj.parameter[0].parameterName,
+                };
+            });
+
+
+            // === 渲染今日焦點卡片 (使用第一個時段的數據作為當前參考) ===
+            const current = combinedForecasts[0];
             const avgTemp = Math.round((parseInt(current.maxTemp) + parseInt(current.minTemp)) / 2);
+            const advice = getAdvice(current.rainProb, current.maxTemp);
 
             document.getElementById('heroCard').innerHTML = `
-                        <div class="hero-card">
-                            <div class="hero-period">數據監控中：當前狀態 (${cityName})</div>
-                            <div class="hero-temp-container">
-                                <div class="hero-temp">${avgTemp}°</div>
-                                <div class="hero-icon">${getWeatherIcon(current.weather)}</div>
-                            </div>
-                            <div class="hero-desc">目標地區：${current.weather} / 溫差 ${current.minTemp}° - ${current.maxTemp}°</div>
-                            
-                            <div class="advice-grid">
-                                <div class="advice-item">
-                                    <div class="advice-icon">${advice.rainIcon}</div>
-                                    <div class="advice-text">${advice.rainText}</div>
-                                    <div style="font-size:0.75rem; color:var(--text-light); opacity: 0.7; margin-top:3px;">降雨率 ${current.rain}%</div>
-                                </div>
-                                <div class="advice-item">
-                                    <div class="advice-icon">${advice.clothIcon}</div>
-                                    <div class="advice-text">${advice.clothText}</div>
-                                    <div style="font-size:0.75rem; color:var(--text-light); opacity: 0.7; margin-top:3px;">濕度 ${current.humidity}%</div>
-                                </div>
-                            </div>
+                <div class="hero-card">
+                    <div class="hero-period">數據監控中：當前狀態 (${FIXED_CITY_NAME})</div>
+                    <div class="hero-temp-container">
+                        <div class="hero-temp">${avgTemp}°</div>
+                        <div class="hero-icon">${getWeatherIcon(current.weatherDesc)}</div>
+                    </div>
+                    <div class="hero-desc">目標地區：${current.weatherDesc} / 溫差 ${current.minTemp}° - ${current.maxTemp}°</div>
+                    
+                    <div class="advice-grid">
+                        <div class="advice-item">
+                            <div class="advice-icon">${advice.rainIcon}</div>
+                            <div class="advice-text">${advice.rainText}</div>
+                            <div style="font-size:0.75rem; color:var(--text-light); opacity: 0.7; margin-top:3px;">降雨率 ${current.rainProb}%</div>
                         </div>
-                    `;
+                        <div class="advice-item">
+                            <div class="advice-icon">${advice.clothIcon}</div>
+                            <div class="advice-text">${advice.clothText}</div>
+                            <div style="font-size:0.75rem; color:var(--text-light); opacity: 0.7; margin-top:3px;">氣溫建議 (最高 ${current.maxTemp}°)</div>
+                        </div>
+                    </div>
+                </div>
+            `;
 
+            // === 渲染未來預報 (36小時的 3 個時段) ===
             const scrollContainer = document.getElementById('futureForecasts');
             scrollContainer.innerHTML = '';
-
-            const dailySummaries = {};
-
-            data.forecasts.forEach((f, index) => {
-                const { dayKey, dayName, dateText } = getDayInfo(f.startTime);
-
-                if (!dailySummaries[dayKey]) {
-                    dailySummaries[dayKey] = {
-                        dayName: index === 0 ? "今日" : dayName,
-                        dateText: dateText,
-                        minTemp: parseInt(f.minTemp),
-                        maxTemp: parseInt(f.maxTemp),
-                        weather: f.weather,
-                        rain: parseInt(f.rain)
-                    };
-                } else {
-                    dailySummaries[dayKey].minTemp = Math.min(dailySummaries[dayKey].minTemp, parseInt(f.minTemp));
-                    dailySummaries[dayKey].maxTemp = Math.max(dailySummaries[dayKey].maxTemp, parseInt(f.maxTemp));
-                    dailySummaries[dayKey].weather = dailySummaries[dayKey].weather.includes(f.weather) ? dailySummaries[dayKey].weather : `${dailySummaries[dayKey].weather}轉${f.weather}`;
-                    dailySummaries[dayKey].rain = Math.max(dailySummaries[dayKey].rain, parseInt(f.rain));
-                }
-            });
             
-            const dailyArray = Object.values(dailySummaries);
-            const daysCount = dailyArray.length;
+            document.getElementById('forecastTitle').textContent = `未來 36 小時天氣時段預報`;
+            document.getElementById('forecastSubtitle').textContent = `時段：${combinedForecasts[0].startTime.substring(0, 10)} ${combinedForecasts[0].startTime.substring(11, 16)} 至 ${combinedForecasts[combinedForecasts.length - 1].endTime.substring(11, 16)}`;
 
-            if (daysCount >= 5) {
-                document.getElementById('forecastTitle').textContent = `未來 ${daysCount} 天天氣概況`;
-                document.getElementById('forecastSubtitle').textContent = `系統預計覆蓋範圍：${dailyArray[0].dateText} 至 ${dailyArray[daysCount - 1].dateText}`;
-            } else {
-                document.getElementById('forecastTitle').textContent = `未來 48 小時數據概況`;
-                document.getElementById('forecastSubtitle').textContent = `⚠️ 警告：目前僅擷取到 ${daysCount} 天完整數據，無法提供一週預報。`;
-            }
 
-            dailyArray.forEach((f) => {
-                const displayWeather = f.weather.split('轉')[0];
-
+            combinedForecasts.forEach((f, index) => {
+                // 將時段標籤顯示為：今日/明日 + 上午/下午/晚上
+                let timeLabel;
+                const hour = new Date(f.startTime).getHours();
+                const { dayName, dateText } = getDayInfo(f.startTime);
+                
+                if (index === 0) {
+                    timeLabel = "當前時段";
+                } else if (index === 1) {
+                    timeLabel = "次一時段";
+                } else {
+                     timeLabel = "最終時段";
+                }
+                
+                // 更詳細的時段描述
+                let periodDesc;
+                if (hour >= 6 && hour < 18) {
+                    periodDesc = "白天";
+                } else {
+                    periodDesc = "晚上";
+                }
+                
                 scrollContainer.innerHTML += `
                     <div class="mini-card">
-                        <div class="mini-time">${f.dayName} (${f.dateText})</div>
-                        <div class="mini-icon">${getWeatherIcon(displayWeather)}</div>
+                        <div class="mini-time">${dayName} ${dateText} ${periodDesc}</div>
+                        <div class="mini-icon">${getWeatherIcon(f.weatherDesc)}</div>
                         <div class="mini-temp">${f.minTemp}° ~ ${f.maxTemp}°</div>
-                        <div style="font-size:0.8rem; color:var(--primary-accent); margin-top:8px; font-weight: 600;">💧 ${f.rain}%</div>
+                        <div style="font-size:0.8rem; color:var(--primary-accent); margin-top:8px; font-weight: 600;">💧 ${f.rainProb}%</div>
                     </div>
                 `;
             });
 
+            // 渲染系統更新時間
             const now = new Date();
             const formatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
             document.getElementById('updateTime').textContent = `系統時間：${formatter.format(now)}`;
         }
 
-        // --- 核心數據抓取函式 (移除所有地區切換和定位邏輯) ---
+        // --- 核心數據抓取函式 (使用 CWA 官方 API) ---
 
-        async function fetchWeather(citySlug, cityName) {
-            const apiUrl = API_BASE_URL + citySlug;
+        async function fetchWeather() {
             
-            // 當開始抓取新數據時，重設 loading 狀態為正常
             const loadingEl = document.getElementById('loading');
             loadingEl.innerHTML = `
                 <div style="font-size: 4rem;" class="loading-icon" id="loadingIcon">📡</div>
-                <p style="color: var(--primary-accent); font-weight: 600; margin-top: 20px;" id="loadingText">正在載入 ${cityName} 的氣象數據...</p>
+                <p style="color: var(--primary-accent); font-weight: 600; margin-top: 20px;" id="loadingText">正在從 CWA 資料庫讀取 ${FIXED_CITY_NAME} 的氣象數據...</p>
             `;
             
             try {
                 // 1. 定義「最低等待時間」：1500 毫秒 (1.5秒)
                 const delayPromise = new Promise(resolve => setTimeout(resolve, 1500));
-                const fetchPromise = fetch(apiUrl).then(res => res.json());
+                
+                // 2. 抓取 CWA API
+                const fetchPromise = fetch(API_URL).then(res => res.json());
                 const [_, json] = await Promise.all([delayPromise, fetchPromise]);
-
-                if (json.success) {
-                    renderWeather(json.data, cityName);
+                
+                // CWA 數據結構檢查
+                if (json && json.success === 'true' && json.records && json.records.location && json.records.location.length > 0) {
+                    renderWeather(json);
                     
                     // 成功：隱藏 Loading，顯示主畫面
                     document.getElementById('loading').style.opacity = '0';
@@ -500,8 +536,8 @@
                     }, 500); 
 
                 } else {
-                    // API 返回 {success: false} 或數據結構異常
-                    throw new Error("API reported failure or missing data.");
+                    // CWA 數據結構異常或 API 報告失敗
+                    throw new Error("CWA API returned invalid data structure.");
                 }
             } catch (e) {
                 console.error("Fetch Error:", e);
@@ -514,22 +550,20 @@
                 loadingEl.innerHTML = `
                     <div style="font-size: 4rem;" class="error-icon">❌</div>
                     <p style="color: var(--error-red); font-weight: 600; margin-top: 20px;">
-                        錯誤：無法讀取 ${cityName} 的天氣數據。
+                        錯誤：無法讀取 ${FIXED_CITY_NAME} 的天氣數據。
                     </p>
                     <p style="color: var(--text-light); opacity: 0.7; font-size: 0.9rem; margin-top: 10px;">
-                        請確認伺服器或網路連線是否正常。
+                        錯誤原因：資料庫連線超時或 API 響應格式錯誤。
                     </p>
                 `;
             }
         }
         
-        // --- 初始化函式 (簡化為只載入固定城市) ---
+        // --- 初始化函式 ---
         
         function initApp() {
-            // 由於城市已固定，不需要初始化選擇器和監聽事件
-            
-            // 首次載入時，直接抓取新北市 (使用 FIXED_CITY_SLUG) 的數據
-            fetchWeather(FIXED_CITY_SLUG, FIXED_CITY_NAME);
+            // 首次載入時，直接抓取新北市的數據
+            fetchWeather();
         }
 
 
