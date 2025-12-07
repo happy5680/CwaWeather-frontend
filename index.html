@@ -95,7 +95,7 @@
             z-index: 100;
         }
         
-        /* 地點選擇器風格化 */
+        /* 地點顯示風格化 (重用選擇器的樣式) */
         .location-select {
             background-color: var(--base-dark);
             color: var(--primary-accent);
@@ -104,24 +104,17 @@
             padding: 8px 15px;
             font-weight: 600;
             font-size: 1rem;
+            display: inline-block; /* 讓 div 擁有 select 的外觀 */
             
             /* 擬物化內凹效果 */
             box-shadow: inset 2px 2px 5px var(--shadow-dark),
                         inset -2px -2px 5px var(--shadow-light);
-            appearance: none; /* 隱藏原生箭頭 */
-            /* 自定義箭頭 SVG */
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'><path fill='%2300FFFF' d='M5 8l5 5 5-5z'/></svg>");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            padding-right: 35px; /* 為箭頭留出空間 */
-            cursor: pointer;
             transition: all 0.2s;
         }
         
+        /* 移除 focus 樣式，因為現在是靜態顯示 */
         .location-select:focus {
             outline: none;
-            border-color: #00FFFF;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.6); /* 聚焦時發光 */
         }
 
         .update-pill {
@@ -303,8 +296,8 @@
 
     <!-- Header/Status Bar -->
     <div class="status-bar">
-        <!-- 城市選擇器 -->
-        <select id="citySelector" class="location-select"></select>
+        <!-- 城市選擇器已被移除，改為靜態顯示新北市 -->
+        <div id="fixedLocationDisplay" class="location-select">新北市 (系統鎖定)</div>
         <div id="updateTime" class="update-pill">系統時間：同步中...</div>
     </div>
 
@@ -328,16 +321,12 @@
         // API 基礎路徑
         const API_BASE_URL = "https://taipei-weatherapi.zeabur.app/api/weather/";
         
-        // 可用的城市端點 (slug: 顯示名稱)
-        const CITY_ENDPOINTS = {
-            'geolocation': '偵測目前位置 (GPS)',
-            'taipei': '台北市',
-            'taichung': '台中市',
-            'kaohsiung': '高雄市'
-        };
+        // **修正：鎖定新北市的數據 (使用 API 中最接近的台北市 slug)**
+        const FIXED_CITY_SLUG = 'taipei'; 
+        const FIXED_CITY_NAME = '新北市'; 
 
-        // 追蹤當前選擇的城市 slug (用於錯誤時切回)
-        let currentCitySlug = 'kaohsiung'; // 預設為高雄
+        // 追蹤當前城市的 slug (現在固定了)
+        let currentCitySlug = FIXED_CITY_SLUG; 
 
         // --- Utility Functions (保持不變) ---
         
@@ -482,80 +471,7 @@
             document.getElementById('updateTime').textContent = `系統時間：${formatter.format(now)}`;
         }
 
-        // --- Geolocation 邏輯 (保持不變) ---
-
-        /**
-         * 處理 Geolocation 成功的回調
-         */
-        function geolocationSuccess(pos) {
-            const latitude = pos.coords.latitude;
-            const longitude = pos.coords.longitude;
-            let citySlug = 'kaohsiung'; // 預設高雄
-
-            // 簡易的台灣城市範圍判斷 (僅用於選擇 API 城市)
-            if (latitude > 24.5) {
-                if (latitude > 24.8 && longitude < 121.6) {
-                    citySlug = 'taipei'; // 距離台北較近
-                } else {
-                    citySlug = 'taichung'; // 距離台中較近
-                }
-            }
-            
-            const selector = document.getElementById('citySelector');
-            selector.value = citySlug;
-            // 更新 currentCitySlug，準備如果發生錯誤時切換回這個城市
-            // NOTE: 此處不更新 currentCitySlug，等到 fetchWeather 成功後再更新
-            
-            // 調整顯示名稱，加入 "目前位置"
-            const cityName = CITY_ENDPOINTS[citySlug] + ' (GPS定位)';
-            selector.options[selector.selectedIndex].text = cityName;
-
-            fetchWeather(citySlug, cityName);
-        }
-
-        /**
-         * 處理 Geolocation 失敗的回調
-         */
-        function geolocationError(err) {
-            console.warn(`Geolocation ERROR(${err.code}): ${err.message}`);
-            
-            const selector = document.getElementById('citySelector');
-            // 將選擇器設定回預設或上一個成功的城市 (在這裡是 currentCitySlug)
-            selector.value = currentCitySlug; 
-            
-            const defaultCityName = CITY_ENDPOINTS[currentCitySlug];
-
-            // 提示定位失敗，並載入預設城市
-            const loadingText = document.getElementById('loadingText');
-            document.getElementById('loadingIcon').className = 'error-icon';
-            document.getElementById('loadingIcon').textContent = '⚠️';
-            loadingText.style.color = 'var(--error-red)';
-            loadingText.textContent = `定位失敗 (${err.message})，正在載入預設城市 ${defaultCityName} 數據...`;
-            
-            fetchWeather(currentCitySlug, defaultCityName);
-        }
-
-        /**
-         * 嘗試獲取使用者位置
-         */
-        function getUserLocation() {
-            // 顯示 Loading
-            document.getElementById('mainContent').style.display = 'none';
-            document.getElementById('loading').style.opacity = '1';
-            document.getElementById('loading').style.display = 'flex';
-            document.getElementById('loadingIcon').className = 'loading-icon';
-            document.getElementById('loadingIcon').textContent = '📡';
-            document.getElementById('loadingText').style.color = 'var(--primary-accent)';
-            document.getElementById('loadingText').textContent = "正在透過 GPS 座標偵測目前位置...";
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(geolocationSuccess, geolocationError, { timeout: 10000 });
-            } else {
-                geolocationError({code: 0, message: "瀏覽器不支持地理定位功能。"});
-            }
-        }
-
-        // --- 核心數據抓取函式 (增加錯誤處理) ---
+        // --- 核心數據抓取函式 (移除所有地區切換和定位邏輯) ---
 
         async function fetchWeather(citySlug, cityName) {
             const apiUrl = API_BASE_URL + citySlug;
@@ -576,9 +492,6 @@
                 if (json.success) {
                     renderWeather(json.data, cityName);
                     
-                    // *** 關鍵更新：成功時才更新 currentCitySlug ***
-                    currentCitySlug = citySlug;
-
                     // 成功：隱藏 Loading，顯示主畫面
                     document.getElementById('loading').style.opacity = '0';
                     setTimeout(() => {
@@ -588,7 +501,6 @@
 
                 } else {
                     // API 返回 {success: false} 或數據結構異常
-                    // 此錯誤會被 catch 區塊捕獲，並顯示友好的 UI 錯誤提示
                     throw new Error("API reported failure or missing data.");
                 }
             } catch (e) {
@@ -599,53 +511,25 @@
                 document.getElementById('loading').style.opacity = '1';
                 document.getElementById('loading').style.display = 'flex';
                 
-                // 由於失敗，currentCitySlug 保留上一個成功的城市
-
                 loadingEl.innerHTML = `
                     <div style="font-size: 4rem;" class="error-icon">❌</div>
                     <p style="color: var(--error-red); font-weight: 600; margin-top: 20px;">
-                        數據傳輸失敗：城市 ${cityName} 的核心資料庫無響應。
+                        錯誤：無法讀取 ${cityName} 的天氣數據。
                     </p>
                     <p style="color: var(--text-light); opacity: 0.7; font-size: 0.9rem; margin-top: 10px;">
-                        請嘗試切換到其他城市 (如高雄市)，或稍後重試。
+                        請確認伺服器或網路連線是否正常。
                     </p>
                 `;
             }
         }
         
-        // --- 事件處理與初始化 (保持不變) ---
+        // --- 初始化函式 (簡化為只載入固定城市) ---
         
-        function handleCitySelection(event) {
-            const slug = event.target.value;
-            const cityName = CITY_ENDPOINTS[slug];
-
-            if (slug === 'geolocation') {
-                getUserLocation();
-            } else {
-                // NOTE: 不在此處更新 currentCitySlug，改在 fetchWeather 成功後更新。
-                // Start fetching data
-                document.getElementById('mainContent').style.display = 'none';
-                document.getElementById('loading').style.opacity = '1';
-                document.getElementById('loading').style.display = 'flex';
-                fetchWeather(slug, cityName);
-            }
-        }
-
         function initApp() {
-            const selector = document.getElementById('citySelector');
+            // 由於城市已固定，不需要初始化選擇器和監聽事件
             
-            for (const [slug, name] of Object.entries(CITY_ENDPOINTS)) {
-                const option = document.createElement('option');
-                option.value = slug;
-                option.textContent = name;
-                selector.appendChild(option);
-            }
-
-            selector.value = currentCitySlug;
-            selector.addEventListener('change', handleCitySelection);
-            
-            // 首次載入時，從預設城市開始抓取數據 (Kaohsiung)
-            fetchWeather(currentCitySlug, CITY_ENDPOINTS[currentCitySlug]);
+            // 首次載入時，直接抓取新北市 (使用 FIXED_CITY_SLUG) 的數據
+            fetchWeather(FIXED_CITY_SLUG, FIXED_CITY_NAME);
         }
 
 
