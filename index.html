@@ -420,7 +420,8 @@
     <div class="status-bar">
         <div class="location-badge">
             <span class="location-icon">📍</span> 
-            <span>NEO-TAIPEI</span>
+            <!-- 區域顯示區，一開始是 LOADING，抓到資料後會更新 -->
+            <span id="locationName">LOADING...</span>
         </div>
         <div id="updateTime" class="update-pill">SYNCING...</div>
     </div>
@@ -443,10 +444,13 @@
     </div>
 
     <script>
+        // API 網址，目前指向高雄
         const API_URL = "https://taipei-weatherapi.zeabur.app/api/weather/kaohsiung";
 
         // === 備用模擬資料 (防止 API 掛掉時畫面全白) ===
         const MOCK_DATA = {
+            // 新增地區名稱到模擬資料中
+            locationName: "NEO-TAIPEI (DEMO)", 
             forecasts: [
                 {
                     startTime: new Date().toISOString(),
@@ -523,11 +527,24 @@
         }
 
         function renderWeather(data) {
+            // 提取 locationName (地區名稱)
+            const locationName = data.locationName.toUpperCase();
+            
+            // 1. 更新頂部地區名稱
+            const locationElement = document.getElementById('locationName');
+            locationElement.textContent = locationName;
+            // 確保非 Demo 模式下是霓虹藍
+            if (!locationName.includes("(DEMO)")) {
+                locationElement.style.color = "var(--neon-blue)";
+                locationElement.style.textShadow = "0 0 10px rgba(0, 243, 255, 0.5)";
+            }
+
+
             const forecasts = data.forecasts;
             const current = forecasts[0];
             const others = forecasts.slice(1);
 
-            // 1. 渲染 Hero Card
+            // 2. 渲染 Hero Card
             const advice = getAdvice(current.rain, current.maxTemp);
             const period = getTimePeriod(current.startTime);
             const avgTemp = Math.round((parseInt(current.maxTemp) + parseInt(current.minTemp)) / 2);
@@ -560,7 +577,7 @@
                 </div>
             `;
 
-            // 2. 渲染稍後預報
+            // 3. 渲染稍後預報
             const scrollContainer = document.getElementById('futureForecasts');
             scrollContainer.innerHTML = '';
             const todayDate = new Date().getDate();
@@ -590,7 +607,7 @@
                 `;
             });
 
-            // 3. 更新時間
+            // 4. 更新時間
             const now = new Date();
             const month = (now.getMonth() + 1).toString().padStart(2, '0');
             const date = now.getDate().toString().padStart(2, '0');
@@ -600,7 +617,7 @@
             document.getElementById('updateTime').textContent = `${month}/${date} ${hours}:${minutes}`;
         }
 
-        // 新增：隱藏 Loading 的輔助函式
+        // 隱藏 Loading 的輔助函式
         function hideLoading() {
             const loading = document.getElementById('loading');
             loading.style.opacity = '0';
@@ -631,11 +648,15 @@
                 // 嘗試抓取
                 const [_, json] = await Promise.all([delayPromise, fetchWithTimeout(API_URL)]);
 
-                if (json.success) {
+                if (json.success && json.data) {
+                    // 檢查 API 是否回傳 locationName
+                    if (!json.data.locationName) {
+                        json.data.locationName = "UNKNOWN SECTOR"; 
+                    }
                     renderWeather(json.data);
                     hideLoading();
                 } else {
-                    throw new Error("API Data Invalid");
+                    throw new Error("API Data Invalid or Missing");
                 }
 
             } catch (e) {
@@ -645,9 +666,10 @@
                 renderWeather(MOCK_DATA);
                 
                 // 標示為離線/展示模式
-                const locBadge = document.querySelector('.location-badge span:last-child');
-                locBadge.textContent = "NEO-TAIPEI (DEMO)";
-                locBadge.style.color = "var(--neon-pink)";
+                const locationElement = document.getElementById('locationName');
+                locationElement.textContent = MOCK_DATA.locationName;
+                locationElement.style.color = "var(--neon-pink)";
+                locationElement.style.textShadow = "0 0 10px var(--neon-pink)";
                 
                 hideLoading();
             }
