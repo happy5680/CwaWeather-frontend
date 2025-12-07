@@ -504,7 +504,7 @@
             const selector = document.getElementById('citySelector');
             selector.value = citySlug;
             // 更新 currentCitySlug，準備如果發生錯誤時切換回這個城市
-            currentCitySlug = citySlug; 
+            // NOTE: 此處不更新 currentCitySlug，等到 fetchWeather 成功後再更新
             
             // 調整顯示名稱，加入 "目前位置"
             const cityName = CITY_ENDPOINTS[citySlug] + ' (GPS定位)';
@@ -520,7 +520,7 @@
             console.warn(`Geolocation ERROR(${err.code}): ${err.message}`);
             
             const selector = document.getElementById('citySelector');
-            // 將選擇器設定回預設或上一個成功的城市 (在這裡是 kaohsiung)
+            // 將選擇器設定回預設或上一個成功的城市 (在這裡是 currentCitySlug)
             selector.value = currentCitySlug; 
             
             const defaultCityName = CITY_ENDPOINTS[currentCitySlug];
@@ -575,6 +575,9 @@
 
                 if (json.success) {
                     renderWeather(json.data, cityName);
+                    
+                    // *** 關鍵更新：成功時才更新 currentCitySlug ***
+                    currentCitySlug = citySlug;
 
                     // 成功：隱藏 Loading，顯示主畫面
                     document.getElementById('loading').style.opacity = '0';
@@ -585,6 +588,7 @@
 
                 } else {
                     // API 返回 {success: false} 或數據結構異常
+                    // 此錯誤會被 catch 區塊捕獲，並顯示友好的 UI 錯誤提示
                     throw new Error("API reported failure or missing data.");
                 }
             } catch (e) {
@@ -594,6 +598,8 @@
                 document.getElementById('mainContent').style.display = 'none';
                 document.getElementById('loading').style.opacity = '1';
                 document.getElementById('loading').style.display = 'flex';
+                
+                // 由於失敗，currentCitySlug 保留上一個成功的城市
 
                 loadingEl.innerHTML = `
                     <div style="font-size: 4rem;" class="error-icon">❌</div>
@@ -616,9 +622,8 @@
             if (slug === 'geolocation') {
                 getUserLocation();
             } else {
-                // 如果是手動選擇城市，更新 currentCitySlug，為下次錯誤切換做準備
-                currentCitySlug = slug;
-                // 開始抓取數據
+                // NOTE: 不在此處更新 currentCitySlug，改在 fetchWeather 成功後更新。
+                // Start fetching data
                 document.getElementById('mainContent').style.display = 'none';
                 document.getElementById('loading').style.opacity = '1';
                 document.getElementById('loading').style.display = 'flex';
